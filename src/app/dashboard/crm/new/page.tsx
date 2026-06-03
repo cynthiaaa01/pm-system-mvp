@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { getClients } from "@/actions/clients";
 import { createProposal } from "@/actions/proposals";
-import { PROJECT_TYPE_LABELS } from "@/lib/constants";
 import { useRouter } from "next/navigation";
 
 export default function NewProposalPage() {
@@ -54,32 +53,42 @@ export default function NewProposalPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
             {/* Client */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>選擇客戶 *</label>
-              <select 
-                name="client_id" 
+              <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>客戶名稱 *</label>
+              <input 
+                name="client_name"
+                list="clients-list"
                 required 
+                placeholder="請輸入或選擇客戶名稱"
                 style={inputStyle}
-              >
-                <option value="">請選擇客戶...</option>
+              />
+              <datalist id="clients-list">
                 {clients.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.name} />
                 ))}
-              </select>
+              </datalist>
             </div>
 
-            {/* Project Type */}
+            {/* Tags */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>專案類型 *</label>
-              <select 
-                name="project_type" 
-                required 
-                style={inputStyle}
-              >
-                <option value="">請選擇類型...</option>
-                {Object.entries(PROJECT_TYPE_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
+              <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>活動標籤</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {['線上任務', '線上電競賽', '實體電競賽', '攤位活動'].map(tag => (
+                  <label key={tag} style={{ 
+                    display: "flex", alignItems: "center", gap: "6px",
+                    padding: "6px 12px",
+                    background: "var(--bg-tertiary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "100px",
+                    cursor: "pointer",
+                    fontSize: "13px",
+                    color: "var(--text-primary)",
+                    transition: "var(--transition)"
+                  }}>
+                    <input type="checkbox" name="tags" value={tag} style={{ accentColor: "var(--accent-purple)" }} />
+                    {tag}
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
           </div>
 
@@ -169,10 +178,11 @@ export default function NewProposalPage() {
                 borderRadius: "var(--radius-md)", 
                 cursor: "pointer",
                 fontWeight: "600",
-                opacity: loading ? 0.7 : 1
+                opacity: loading ? 0.7 : 1,
+                minWidth: "150px"
               }}
             >
-              {loading ? "建立中..." : "建立提案"}
+              {loading ? "處理中... (AI解析約需5秒)" : "建立提案"}
             </button>
           </div>
         </form>

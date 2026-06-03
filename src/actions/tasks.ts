@@ -91,3 +91,33 @@ export async function getAllUsers() {
   if (error) return [];
   return data;
 }
+
+export async function getAllTasks() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*, projects(name)")
+    .order("due_date", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching all tasks:", error);
+    return [];
+  }
+  return data;
+}
+export async function deleteTask(id: string, projectId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tasks")
+    .delete()
+    .eq("id", id);
+    
+  if (error) {
+    console.error("Error deleting task:", error);
+    return { error: error.message };
+  }
+  
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath("/dashboard/tasks");
+  return { success: true };
+}

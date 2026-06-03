@@ -8,10 +8,11 @@ import type { ProjectStatus } from "@/types/database";
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined }
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const status = typeof searchParams.status === "string" ? searchParams.status : undefined;
-  const search = typeof searchParams.search === "string" ? searchParams.search : undefined;
+  const resolvedParams = await searchParams;
+  const status = typeof resolvedParams.status === "string" ? resolvedParams.status : undefined;
+  const search = typeof resolvedParams.search === "string" ? resolvedParams.search : undefined;
 
   const projects = await getProjects({ status, search });
 

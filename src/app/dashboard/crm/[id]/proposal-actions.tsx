@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { markAsWon, updateProposalStatus } from "@/actions/proposals";
+import { markAsWon, updateProposalStatus, deleteProposal } from "@/actions/proposals";
 import { useRouter } from "next/navigation";
 import { PROPOSAL_STATUS_LABELS } from "@/lib/constants";
 import { ProposalStatus } from "@/types/database";
@@ -41,39 +41,78 @@ export default function ProposalActions({ proposal }: { proposal: any }) {
     setLoading(false);
   }
 
-  if (isTerminal) return null;
+  async function handleDelete() {
+    if (!confirm("確定要刪除此提案嗎？此操作無法復原。")) return;
+    
+    setLoading(true);
+    const res = await deleteProposal(proposal.id);
+    if (res?.error) {
+      alert("刪除失敗：" + res.error);
+      setLoading(false);
+    } else {
+      router.push("/dashboard/crm");
+      router.refresh();
+    }
+  }
 
   return (
     <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-      <select 
-        value={proposal.status} 
-        onChange={handleStatusChange}
-        disabled={loading}
-        style={{
-          padding: "8px 12px",
-          background: "var(--bg-glass)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-md)",
-          color: "var(--text-primary)",
-          fontSize: "14px",
-          outline: "none"
-        }}
-      >
-        {Object.entries(PROPOSAL_STATUS_LABELS).map(([value, label]) => (
-          <option key={value} value={value} disabled={value === "won"}>
-            {label}
-          </option>
-        ))}
-      </select>
+      {!isTerminal && (
+        <>
+          <select 
+            value={proposal.status} 
+            onChange={handleStatusChange}
+            disabled={loading}
+            style={{
+              padding: "8px 12px",
+              background: "var(--bg-glass)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              color: "var(--text-primary)",
+              fontSize: "14px",
+              outline: "none"
+            }}
+          >
+            {Object.entries(PROPOSAL_STATUS_LABELS).map(([value, label]) => (
+              <option key={value} value={value} disabled={value === "won"}>
+                {label}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleMarkAsWon}
+            disabled={loading}
+            style={{
+              padding: "10px 20px",
+              background: "linear-gradient(135deg, #00b894, #00cec9)",
+              border: "none",
+              color: "white",
+              borderRadius: "var(--radius-md)",
+              cursor: "pointer",
+              fontWeight: "600",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              opacity: loading ? 0.7 : 1,
+              boxShadow: "0 4px 15px rgba(0, 184, 148, 0.3)",
+              transition: "var(--transition)"
+            }}
+          >
+            {loading ? "處理中..." : "🎉 標記為成交"}
+          </button>
+        </>
+      )}
 
       <button
-        onClick={handleMarkAsWon}
+        onClick={handleDelete}
         disabled={loading}
         style={{
-          padding: "10px 20px",
-          background: "linear-gradient(135deg, #00b894, #00cec9)",
-          border: "none",
-          color: "white",
+          padding: "10px 16px",
+          background: "transparent",
+          border: "1px solid rgba(255, 71, 87, 0.5)",
+          color: "#ff4757",
           borderRadius: "var(--radius-md)",
           cursor: "pointer",
           fontWeight: "600",
@@ -82,11 +121,12 @@ export default function ProposalActions({ proposal }: { proposal: any }) {
           alignItems: "center",
           gap: "8px",
           opacity: loading ? 0.7 : 1,
-          boxShadow: "0 4px 15px rgba(0, 184, 148, 0.3)",
-          transition: "var(--transition)"
+          transition: "all 0.2s"
         }}
+        onMouseOver={(e) => { e.currentTarget.style.background = "rgba(255, 71, 87, 0.1)"; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = "transparent"; }}
       >
-        {loading ? "處理中..." : "🎉 標記為成交"}
+        🗑️ 刪除提案
       </button>
     </div>
   );

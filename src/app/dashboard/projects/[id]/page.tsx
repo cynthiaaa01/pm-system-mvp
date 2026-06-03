@@ -1,14 +1,21 @@
 import Link from "next/link";
 import { getProject } from "@/actions/projects";
 import { getProjectTasks, getAllUsers } from "@/actions/tasks";
+import { getProjectUpdates } from "@/actions/task-updates";
 import { notFound } from "next/navigation";
 import { formatDate } from "@/lib/utils";
-import { PROJECT_TYPE_LABELS, PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from "@/lib/constants";
+import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from "@/lib/constants";
 import ProjectDetailClient from "./project-detail-client";
-import type { ProjectStatus, ProjectType } from "@/types/database";
+import ManagerAssignSelect from "./manager-assign-select";
+import ProjectActions from "./project-actions";
+import { TagManager } from "@/components/ui/tag-manager";
+import type { ProjectStatus } from "@/types/database";
 
-export default async function ProjectDetailPage({ params }: { params: { id: string } }) {
-  const project = await getProject(params.id);
+export const dynamic = "force-dynamic";
+
+export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
+  const project = await getProject(resolvedParams.id);
   
   if (!project) {
     notFound();
@@ -16,16 +23,18 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
 
   const tasks = await getProjectTasks(project.id);
   const users = await getAllUsers();
+  const updates = await getProjectUpdates(project.id);
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px", justifyContent: "space-between" }}>
         <Link 
           href="/dashboard/projects"
           style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px", textDecoration: "none" }}
         >
           ← 返回列表
         </Link>
+        <ProjectActions projectId={project.id} />
       </div>
 
       {/* Header */}
@@ -60,16 +69,16 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
             <p style={{ fontSize: "14px", color: "var(--text-primary)", margin: 0, fontWeight: "500" }}>{project.clients?.name}</p>
           </div>
           <div>
-            <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>專案類型</p>
-            <p style={{ fontSize: "14px", color: "var(--text-primary)", margin: 0 }}>{PROJECT_TYPE_LABELS[(project.project_type || "") as ProjectType] || project.project_type}</p>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>活動標籤</p>
+            <TagManager projectId={project.id} initialTags={project.tags || []} />
           </div>
           <div>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>運營負責人</p>
-            <p style={{ fontSize: "14px", color: "var(--text-primary)", margin: 0 }}>{project.operations?.full_name || "未指派"}</p>
+            <ManagerAssignSelect projectId={project.id} currentManagerId={project.operations_id} role="operations" users={users} />
           </div>
           <div>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>行銷負責人</p>
-            <p style={{ fontSize: "14px", color: "var(--text-primary)", margin: 0 }}>{project.marketing?.full_name || "未指派"}</p>
+            <ManagerAssignSelect projectId={project.id} currentManagerId={project.marketing_id} role="marketing" users={users} />
           </div>
           <div>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>開始日期</p>
@@ -110,7 +119,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
       </div>
 
       {/* Interactive Task List Component */}
-      <ProjectDetailClient project={project} tasks={tasks} users={users} />
+      <ProjectDetailClient project={project} tasks={tasks} users={users} updates={updates} />
 
     </div>
   );

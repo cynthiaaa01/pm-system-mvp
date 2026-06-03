@@ -2,12 +2,13 @@ import Link from "next/link";
 import { getProposal } from "@/actions/proposals";
 import { notFound } from "next/navigation";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { PROJECT_TYPE_LABELS, PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_COLORS } from "@/lib/constants";
-import type { ProposalStatus, ProjectType } from "@/types/database";
+import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_COLORS } from "@/lib/constants";
+import type { ProposalStatus } from "@/types/database";
 import ProposalActions from "./proposal-actions";
 
-export default async function ProposalDetailPage({ params }: { params: { id: string } }) {
-  const proposal = await getProposal(params.id);
+export default async function ProposalDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const proposal = await getProposal(id);
 
   if (!proposal) {
     notFound();
@@ -70,8 +71,17 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
               </div>
 
               <div>
-                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>專案類型</p>
-                <p style={{ fontSize: "15px", color: "var(--text-primary)", margin: 0 }}>{PROJECT_TYPE_LABELS[(proposal.project_type || "") as ProjectType] || proposal.project_type}</p>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>活動標籤</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {proposal.tags && proposal.tags.length > 0 ? proposal.tags.map((tag: string) => (
+                    <span key={tag} style={{ 
+                      padding: "3px 10px", borderRadius: "100px", fontSize: "12px", fontWeight: "500",
+                      background: "rgba(108, 92, 231, 0.15)", color: "var(--accent-purple-light)"
+                    }}>{tag}</span>
+                  )) : (
+                    <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>未設定</span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -99,6 +109,48 @@ export default async function ProposalDetailPage({ params }: { params: { id: str
               {proposal.notes || <span style={{ color: "var(--text-muted)" }}>無備註內容</span>}
             </div>
           </div>
+
+          {proposal.parsed_items && (
+            <div className="glass-card" style={{ padding: "24px", border: "1px solid rgba(108, 92, 231, 0.3)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                <span style={{ fontSize: "18px" }}>✨</span>
+                <h2 style={{ fontSize: "16px", fontWeight: "600", color: "var(--accent-purple-light)", margin: 0 }}>AI 報價單解析結果</h2>
+              </div>
+              
+              <div style={{ marginBottom: "16px", background: "var(--bg-tertiary)", padding: "12px", borderRadius: "var(--radius-md)" }}>
+                <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: "var(--text-secondary)" }}>AI 判斷專案名稱</p>
+                <p style={{ margin: 0, fontSize: "15px", fontWeight: "500", color: "var(--text-primary)" }}>{proposal.parsed_items.project_name}</p>
+              </div>
+
+              {proposal.parsed_items.items && proposal.parsed_items.items.length > 0 ? (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)", textAlign: "left" }}>
+                      <th style={{ padding: "8px", color: "var(--text-secondary)", fontWeight: "500" }}>品項名稱</th>
+                      <th style={{ padding: "8px", color: "var(--text-secondary)", fontWeight: "500" }}>數量</th>
+                      <th style={{ padding: "8px", color: "var(--text-secondary)", fontWeight: "500" }}>單價</th>
+                      <th style={{ padding: "8px", color: "var(--text-secondary)", fontWeight: "500" }}>總價</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {proposal.parsed_items.items.map((item: any, idx: number) => (
+                      <tr key={idx} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "12px 8px", color: "var(--text-primary)" }}>
+                          <div style={{ fontWeight: "500" }}>{item.name}</div>
+                          {item.description && <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>{item.description}</div>}
+                        </td>
+                        <td style={{ padding: "12px 8px", color: "var(--text-primary)" }}>{item.quantity}</td>
+                        <td style={{ padding: "12px 8px", color: "var(--text-primary)" }}>{formatCurrency(item.unit_price)}</td>
+                        <td style={{ padding: "12px 8px", color: "var(--accent-blue-light)", fontWeight: "500" }}>{formatCurrency(item.total_price)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>AI 未找到具體品項</div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>

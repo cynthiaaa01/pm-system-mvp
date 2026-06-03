@@ -37,8 +37,9 @@ export async function getProposal(id: string) {
     .single();
 
   if (error) {
-    console.error("Error fetching proposal:", error);
-    return null;
+    console.error("Error fetching proposal details:", error.message, error.details, error.hint, error.code);
+    // 拋出明確的錯誤訊息，讓我們能在畫面上直接看到原因
+    throw new Error(`資料庫讀取失敗: ${error.message || JSON.stringify(error)}`);
   }
   return data;
 }
@@ -46,10 +47,9 @@ export async function getProposal(id: string) {
 export async function createProposal(formData: FormData) {
   const supabase = await createClient();
   const title = formData.get("title") as string;
-  const client_id = formData.get("client_id") as string;
+  const client_name = formData.get("client_name") as string;
   const amountStr = formData.get("amount") as string;
   const amount = amountStr ? parseFloat(amountStr) : null;
-  const project_type = formData.get("project_type") as ProjectType;
   const expected_start = formData.get("expected_start") as string;
   const expected_end = formData.get("expected_end") as string;
   const notes = formData.get("notes") as string;
@@ -58,23 +58,54 @@ export async function createProposal(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  let quotation_url = null;
-  if (quotationFile && quotationFile.size > 0) {
-    const fileExt = quotationFile.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-    const filePath = `${user.id}/${fileName}`;
-    
-    const { error: uploadError } = await supabase.storage
-      .from('quotations')
-      .upload(filePath, quotationFile);
+  // 0. Find or create client
+  let client_id = null;
+  if (client_name) {
+    const { data: existingClient } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("name", client_name)
+      .single();
       
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
+    if (existingClient) {
+      client_id = existingClient.id;
     } else {
-      const { data: publicUrlData } = supabase.storage
-        .from('quotations')
-        .getPublicUrl(filePath);
-      quotation_url = publicUrlData.publicUrl;
+      const { data: newClient } = await supabase
+        .from("clients")
+        .insert({ name: client_name })
+        .select("id")
+        .single();
+      if (newClient) client_id = newClient.id;
+    }
+  }
+
+  if (!client_id) return { error: "Client is required" };
+
+  let quotation_url = null;
+  let parsed_items = null;
+
+  if (quotationFile && quotationFile.size > 0) {
+    try {
+      // 1. 將 File 轉換為 Buffer
+      const arrayBuffer = await quotationFile.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const fileExt = quotationFile.name.split('.').pop() || 'pdf';
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+      
+      // 2. 上傳到 OneDrive
+      const { uploadToOneDrive } = await import("@/lib/onedrive");
+      quotation_url = await uploadToOneDrive(buffer, fileName);
+
+      // 3. 呼叫 Gemini AI 進行解析
+      const { parseQuotation } = await import("@/lib/ai-parser");
+      const mimeType = quotationFile.type || "application/pdf";
+      parsed_items = await parseQuotation(buffer, mimeType);
+
+    } catch (e: any) {
+      console.error("OneDrive/AI Error:", e);
+      // Even if upload/parse fails, we might still want to create the record, or we can abort.
+      // For now, we continue but just log the error.
+      return { error: `File processing failed: ${e.message}` };
     }
   }
 
@@ -84,24 +115,31 @@ export async function createProposal(formData: FormData) {
       title,
       client_id,
       amount,
-      project_type,
       expected_start: expected_start || null,
       expected_end: expected_end || null,
       notes,
       quotation_url,
+      parsed_items,
       sales_person_id: user.id,
       status: 'lead'
     })
-    .select()
-    .single();
+    .select();
 
   if (error) {
     console.error("Error creating proposal:", error);
     return { error: error.message };
   }
 
+  // 安全地取得 ID，因為有時候 Supabase 根據版本差異可能會回傳陣列
+  const insertedId = Array.isArray(data) ? (data as any)[0]?.id : (data as any)?.id;
+  
+  if (!insertedId) {
+    console.error("No ID returned from insert. Data was:", data);
+    return { error: "新增成功，但無法取得提案 ID (可能是資料庫權限設定導致無法讀取)" };
+  }
+
   revalidatePath("/dashboard/crm");
-  redirect(`/dashboard/crm/${data.id}`);
+  redirect(`/dashboard/crm/${insertedId}`);
 }
 
 export async function updateProposalStatus(id: string, status: ProposalStatus) {
@@ -139,23 +177,25 @@ export async function markAsWon(id: string) {
     
   if (fetchError || !proposal) return { error: "Proposal not found" };
   
-  // 2. Update status
-  await updateProposalStatus(id, 'won');
-  
-  // 3. Create project
   const startDate = proposal.expected_start ? new Date(proposal.expected_start) : new Date();
   const endDate = proposal.expected_end ? new Date(proposal.expected_end) : addDays(startDate, 30);
   
+  const { data: { user } } = await supabase.auth.getUser();
+  const currentUserId = user?.id || proposal.sales_person_id; // 如果抓不到當前使用者，至少指派給原業務
+
+  // 1. Create project first (so we don't end up with a won proposal and no project if this fails)
   const { data: project, error: projError } = await supabase
     .from("projects")
     .insert({
       name: proposal.title,
       client_id: proposal.client_id,
       proposal_id: proposal.id,
-      project_type: proposal.project_type || 'online_event',
+      operations_id: currentUserId, // 預設指派給當前操作者或原業務，避免違反 not-null 限制
+      marketing_id: null,  // 待行銷主管指派
       start_date: startDate.toISOString().split('T')[0],
       end_date: endDate.toISOString().split('T')[0],
-      status: 'pending'
+      status: 'pending',
+      project_type: proposal.project_type || 'online_event'
     })
     .select()
     .single();
@@ -164,35 +204,87 @@ export async function markAsWon(id: string) {
     console.error("Project creation error:", projError);
     return { error: projError.message };
   }
+
+  // 2. Update status ONLY IF project creation succeeds
+  await updateProposalStatus(id, 'won');
   
-  // 4. Create tasks from template
-  if (project.project_type) {
-    const { data: templates } = await supabase
-      .from("task_templates")
-      .select("*")
-      .eq("project_type", project.project_type)
-      .order("sort_order");
+  // 4. Create OneDrive Folder
+  const clientName = proposal.clients?.name || "未知客戶";
+  let folderUrl = null;
+  try {
+    const { createProjectFolder } = await import("@/lib/onedrive");
+    folderUrl = await createProjectFolder(project.name, clientName);
+    
+    if (folderUrl) {
+      await supabase.from("projects").update({ drive_folder_url: folderUrl }).eq("id", project.id);
+    }
+  } catch (e) {
+    console.error("OneDrive creation failed:", e);
+  }
+
+  // 5. Generate tasks from quotation items using fuzzy matching
+  if (proposal.parsed_items?.items && proposal.parsed_items.items.length > 0) {
+    // Get all unique template item names
+    const { data: allTemplateNames } = await supabase
+      .from("quotation_item_templates")
+      .select("item_name")
+      .order("item_name");
+    
+    const uniqueNames = [...new Set((allTemplateNames || []).map((t: any) => t.item_name))];
+    
+    // Match each parsed item against templates
+    const { fuzzyMatchItems, generateTasksFromTemplates } = await import("@/lib/task-generation");
+    
+    const matchedItemNames: string[] = [];
+    for (const item of proposal.parsed_items.items) {
+      const matches = fuzzyMatchItems(item.name, uniqueNames);
+      matchedItemNames.push(...matches);
+    }
+    
+    // Remove duplicates
+    const uniqueMatched = [...new Set(matchedItemNames)];
+    
+    if (uniqueMatched.length > 0) {
+      // Fetch all templates for matched items
+      const { data: templates } = await supabase
+        .from("quotation_item_templates")
+        .select("*")
+        .in("item_name", uniqueMatched)
+        .order("sort_order");
       
-    if (templates && templates.length > 0) {
-      const tasksToCreate = templates.map(t => {
-        const tStart = addDays(startDate, t.delay_days);
-        const tEnd = addDays(tStart, t.duration_days);
-        return {
+      if (templates && templates.length > 0) {
+        const projectDates = {
+          start_date: project.start_date,
+          event_online_date: null,
+          event_end_date: null,
+          material_confirm_date: null,
+          physical_event_date: null,
+          system_online_date: null,
+          monthly_settle_date: null,
+        };
+        
+        const generatedTasks = generateTasksFromTemplates(templates, projectDates);
+        
+        const tasksToInsert = generatedTasks.map((t: any) => ({
           project_id: project.id,
-          name: t.task_name,
+          title: t.title,
+          source_item: t.source_item,
+          task_category: t.task_category,
+          reference_point: t.reference_point,
+          start_date: t.start_date,
+          due_date: t.due_date,
+          duration_days: t.duration_days,
           sort_order: t.sort_order,
-          start_date: tStart.toISOString().split('T')[0],
-          due_date: tEnd.toISOString().split('T')[0],
           status: 'todo' as any,
           priority: 'medium' as any,
-        };
-      });
-      
-      await supabase.from("tasks").insert(tasksToCreate);
+        }));
+        
+        await supabase.from("tasks").insert(tasksToInsert);
+      }
     }
   }
   
-  // 5. Trigger n8n webhook (non-blocking)
+  // 6. Trigger n8n webhook (non-blocking)
   try {
     const webhookUrl = process.env.N8N_WEBHOOK_URL;
     const apiKey = process.env.N8N_API_KEY;
@@ -219,4 +311,20 @@ export async function markAsWon(id: string) {
   revalidatePath(`/dashboard/crm/${id}`);
   
   return { success: true, projectId: project.id };
+}
+
+export async function deleteProposal(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("proposals")
+    .delete()
+    .eq("id", id);
+    
+  if (error) {
+    console.error("Error deleting proposal:", error);
+    return { error: error.message };
+  }
+  
+  revalidatePath("/dashboard/crm");
+  return { success: true };
 }

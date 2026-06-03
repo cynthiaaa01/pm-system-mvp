@@ -1,20 +1,33 @@
 "use client";
 
 import { useState } from "react";
-import { updateTaskStatus } from "@/actions/tasks";
+import { updateTaskStatus, deleteTask } from "@/actions/tasks";
 import { formatDate } from "@/lib/utils";
 import { TASK_STATUS_LABELS, PRIORITY_COLORS } from "@/lib/constants";
 import type { TaskPriority } from "@/types/database";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function TaskListClient({ initialTasks }: { initialTasks: any[] }) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  // Optimistic UI update could be implemented here, but we'll keep it simple and just show a loading state
-  
+  const router = useRouter();
+
   async function handleStatusChange(taskId: string, newStatus: string, projectId: string) {
     setLoadingId(taskId);
     await updateTaskStatus(taskId, newStatus, projectId);
+    setLoadingId(null);
+  }
+
+  async function handleDeleteTask(taskId: string, projectId: string) {
+    if (!confirm("確定要刪除此任務嗎？此操作無法復原。")) return;
+    setLoadingId(taskId);
+    const res = await deleteTask(taskId, projectId);
+    if (res?.error) {
+      alert("刪除失敗：" + res.error);
+    } else {
+      router.refresh();
+    }
     setLoadingId(null);
   }
 
@@ -48,26 +61,46 @@ export default function TaskListClient({ initialTasks }: { initialTasks: any[] }
         </Link>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
-          <select
-            value={task.status}
-            onChange={(e) => handleStatusChange(task.id, e.target.value, task.project_id)}
-            disabled={loadingId === task.id}
-            style={{
-              padding: "4px 8px",
-              background: "var(--bg-tertiary)",
-              border: "1px solid var(--border)",
-              borderRadius: "100px",
-              color: "var(--text-primary)",
-              fontSize: "12px",
-              fontWeight: "500",
-              outline: "none",
-              cursor: "pointer"
-            }}
-          >
-            {Object.entries(TASK_STATUS_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <select
+              value={task.status}
+              onChange={(e) => handleStatusChange(task.id, e.target.value, task.project_id)}
+              disabled={loadingId === task.id}
+              style={{
+                padding: "4px 8px",
+                background: "var(--bg-tertiary)",
+                border: "1px solid var(--border)",
+                borderRadius: "100px",
+                color: "var(--text-primary)",
+                fontSize: "12px",
+                fontWeight: "500",
+                outline: "none",
+                cursor: "pointer"
+              }}
+            >
+              {Object.entries(TASK_STATUS_LABELS).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleDeleteTask(task.id, task.project_id)}
+              disabled={loadingId === task.id}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--danger)",
+                cursor: "pointer",
+                padding: "4px",
+                opacity: 0.6,
+                transition: "opacity 0.2s"
+              }}
+              title="刪除任務"
+              onMouseOver={e => e.currentTarget.style.opacity = "1"}
+              onMouseOut={e => e.currentTarget.style.opacity = "0.6"}
+            >
+              🗑️
+            </button>
+          </div>
           
           {task.status !== "done" && (
             <button

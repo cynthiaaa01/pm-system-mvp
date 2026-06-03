@@ -19,6 +19,8 @@ export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done' | 'delayed';
 
 export type ProjectType = 'online_event' | 'courseware' | 'training' | 'consulting';
 
+export type ProjectTag = '線上任務' | '線上電競賽' | '實體電競賽' | '攤位活動';
+
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 // =========================
@@ -62,10 +64,14 @@ export interface Proposal {
   amount: number | null;
   currency: string;
   description: string | null;
+  expected_start: string | null;
+  expected_end: string | null;
   expected_close_date: string | null;
   actual_close_date: string | null;
   sales_person_id: string;
   notes: string | null;
+  quotation_url: string | null;
+  parsed_items: any | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +91,13 @@ export interface Project {
   budget: number | null;
   description: string | null;
   notes: string | null;
+  event_online_date: string | null;
+  event_end_date: string | null;
+  material_confirm_date: string | null;
+  physical_event_date: string | null;
+  system_online_date: string | null;
+  monthly_settle_date: string | null;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
@@ -100,6 +113,11 @@ export interface Task {
   due_date: string | null;
   description: string | null;
   sort_order: number;
+  source_item: string | null;
+  task_category: string | null;
+  reference_point: string | null;
+  start_date: string | null;
+  duration_days: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -118,6 +136,68 @@ export interface TaskTemplate {
   project_type: ProjectType;
   tasks: TaskTemplateItem[];
   created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuotationItemTemplate {
+  id: string;
+  item_name: string;
+  task_category: string;
+  task_name: string;
+  reference_point: string;
+  offset_days: number;
+  duration_days: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type UpdateType = 'progress' | 'status_change' | 'file_upload' | 'date_change' | 'comment' | 'milestone';
+
+export interface TaskUpdate {
+  id: string;
+  task_id: string;
+  project_id: string;
+  author_id: string | null;
+  author_role: UserRole | null;
+  content: string;
+  update_type: UpdateType | null;
+  metadata: any | null;
+  created_at: string;
+}
+
+export type NotificationType = 'task_due_soon' | 'task_overdue' | 'task_assigned' | 'project_created' | 'status_change' | 'weekly_summary' | 'assignment_pending';
+export type ReferenceType = 'task' | 'project' | 'proposal';
+
+export interface Notification {
+  id: string;
+  recipient_id: string;
+  type: NotificationType | null;
+  title: string;
+  message: string | null;
+  reference_type: ReferenceType | null;
+  reference_id: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  slack_sent: boolean;
+  created_at: string;
+}
+
+export interface Holiday {
+  id: string;
+  date: string;
+  name: string;
+  year: number;
+}
+
+export interface NotificationPreference {
+  id: string;
+  profile_id: string;
+  email_notifications: boolean;
+  slack_notifications: boolean;
+  app_notifications: boolean;
+  days_in_advance: number;
   created_at: string;
   updated_at: string;
 }
@@ -178,6 +258,13 @@ export interface ProjectInsert {
   budget?: number | null;
   description?: string | null;
   notes?: string | null;
+  event_online_date?: string | null;
+  event_end_date?: string | null;
+  material_confirm_date?: string | null;
+  physical_event_date?: string | null;
+  system_online_date?: string | null;
+  monthly_settle_date?: string | null;
+  tags?: string[];
 }
 
 export interface TaskInsert {
@@ -190,6 +277,11 @@ export interface TaskInsert {
   due_date?: string | null;
   description?: string | null;
   sort_order?: number;
+  source_item?: string | null;
+  task_category?: string | null;
+  reference_point?: string | null;
+  start_date?: string | null;
+  duration_days?: number | null;
 }
 
 export interface TaskTemplateInsert {
@@ -207,7 +299,7 @@ export type ProfileUpdate = Partial<Omit<Profile, 'id' | 'created_at' | 'updated
 export type ClientUpdate = Partial<Omit<Client, 'id' | 'created_at' | 'updated_at'>>;
 export type ProposalUpdate = Partial<Omit<Proposal, 'id' | 'proposal_number' | 'created_at' | 'updated_at'>>;
 export type ProjectUpdate = Partial<Omit<Project, 'id' | 'project_number' | 'created_at' | 'updated_at'>>;
-export type TaskUpdate = Partial<Omit<Task, 'id' | 'task_number' | 'created_at' | 'updated_at'>>;
+export type TaskUpdatePayload = Partial<Omit<Task, 'id' | 'task_number' | 'created_at' | 'updated_at'>>;
 export type TaskTemplateUpdate = Partial<Omit<TaskTemplate, 'id' | 'created_at' | 'updated_at'>>;
 
 // =========================
@@ -316,12 +408,37 @@ export interface Database {
       tasks: {
         Row: Task;
         Insert: TaskInsert;
-        Update: TaskUpdate;
+        Update: TaskUpdatePayload;
       };
       task_templates: {
         Row: TaskTemplate;
         Insert: TaskTemplateInsert;
         Update: TaskTemplateUpdate;
+      };
+      quotation_item_templates: {
+        Row: QuotationItemTemplate;
+        Insert: Omit<QuotationItemTemplate, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<QuotationItemTemplate, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      task_updates: {
+        Row: TaskUpdate;
+        Insert: Omit<TaskUpdate, 'id' | 'created_at'> & { id?: string, created_at?: string };
+        Update: Partial<Omit<TaskUpdate, 'id' | 'created_at'>>;
+      };
+      notifications: {
+        Row: Notification;
+        Insert: Omit<Notification, 'id' | 'created_at'> & { id?: string, created_at?: string };
+        Update: Partial<Omit<Notification, 'id' | 'created_at'>>;
+      };
+      holidays: {
+        Row: Holiday;
+        Insert: Omit<Holiday, 'id'> & { id?: string };
+        Update: Partial<Omit<Holiday, 'id'>>;
+      };
+      notification_preferences: {
+        Row: NotificationPreference;
+        Insert: Omit<NotificationPreference, 'id' | 'created_at' | 'updated_at'> & { id?: string, created_at?: string, updated_at?: string };
+        Update: Partial<Omit<NotificationPreference, 'id' | 'created_at' | 'updated_at'>>;
       };
     };
     Views: {
