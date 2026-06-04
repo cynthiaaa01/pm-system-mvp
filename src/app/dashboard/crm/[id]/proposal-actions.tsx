@@ -23,6 +23,9 @@ export default function ProposalActions({ proposal }: { proposal: any }) {
     
     if (res?.error) {
       alert("操作失敗：" + res.error);
+    } else if (res?.projectId) {
+      router.push(`/dashboard/projects/${res.projectId}`);
+      router.refresh();
     } else {
       router.refresh();
     }

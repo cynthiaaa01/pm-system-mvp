@@ -29,9 +29,9 @@ export async function getProject(id: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("projects")
-    .select("*, clients(*), proposals(title, proposal_number, parsed_items), operations:operations_id(full_name), marketing:marketing_id(full_name)")
+    .select("*, clients(*), proposals(title, proposal_number, parsed_items, tags), operations:operations_id(full_name), marketing:marketing_id(full_name)")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error fetching project:", error);
@@ -52,8 +52,7 @@ export async function updateProjectStatus(id: string, status: string) {
     return { error: error.message };
   }
   
-  revalidatePath(`/dashboard/projects/${id}`);
-  revalidatePath("/dashboard/projects");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }
 
@@ -113,7 +112,7 @@ export async function updateProjectReferenceDates(
       .from("projects")
       .select("start_date, event_online_date, event_end_date, material_confirm_date, physical_event_date, system_online_date, monthly_settle_date")
       .eq("id", projectId)
-      .single();
+      .maybeSingle();
     
     if (project) {
       const { recalculateTaskDates } = await import("@/lib/task-generation");
@@ -156,7 +155,7 @@ export async function updateProjectReferenceDates(
     }
   }
   
-  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }
 
@@ -171,8 +170,7 @@ export async function updateProjectTags(projectId: string, tags: string[]) {
     return { error: error.message };
   }
   
-  revalidatePath(`/dashboard/projects/${projectId}`);
-  revalidatePath("/dashboard/projects");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }
 
@@ -188,6 +186,6 @@ export async function deleteProject(id: string) {
     return { error: error.message };
   }
   
-  revalidatePath("/dashboard/projects");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }

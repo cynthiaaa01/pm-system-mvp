@@ -59,10 +59,10 @@ export async function updateTaskStatus(id: string, status: string, projectId?: s
   // Also recalculate project progress if projectId is known
   if (projectId) {
     await recalculateProgress(projectId);
-    revalidatePath(`/dashboard/projects/${projectId}`);
+    revalidatePath("/dashboard", "layout");
   }
   
-  revalidatePath("/dashboard/tasks");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }
 
@@ -77,7 +77,7 @@ export async function assignTask(id: string, assigneeId: string, projectId?: str
     return { error: error.message };
   }
   
-  if (projectId) revalidatePath(`/dashboard/projects/${projectId}`);
+  if (projectId) revalidatePath("/dashboard", "layout");
   return { success: true };
 }
 
@@ -117,7 +117,10 @@ export async function deleteTask(id: string, projectId: string) {
     return { error: error.message };
   }
   
-  revalidatePath(`/dashboard/projects/${projectId}`);
-  revalidatePath("/dashboard/tasks");
+  if (projectId) {
+    await recalculateProgress(projectId);
+  }
+  
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }

@@ -72,6 +72,8 @@ export interface Proposal {
   notes: string | null;
   quotation_url: string | null;
   parsed_items: any | null;
+  tags: string[];
+  client_tag: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -242,6 +244,10 @@ export interface ProposalInsert {
   expected_close_date?: string | null;
   actual_close_date?: string | null;
   notes?: string | null;
+  quotation_url?: string | null;
+  parsed_items?: any | null;
+  tags?: string[];
+  client_tag?: string | null;
 }
 
 export interface ProjectInsert {
@@ -397,8 +403,8 @@ export interface Database {
       };
       proposals: {
         Row: Proposal;
-        Insert: ProposalInsert;
-        Update: ProposalUpdate;
+        Insert: Omit<Proposal, 'id' | 'created_at' | 'updated_at'> & { id?: string, tags?: string[], client_tag?: string | null };
+        Update: Partial<Omit<Proposal, 'id' | 'created_at' | 'updated_at'>> & { tags?: string[], client_tag?: string | null };
       };
       projects: {
         Row: Project;

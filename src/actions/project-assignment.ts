@@ -35,8 +35,7 @@ export async function assignOperationsManager(projectId: string, userId: string)
     });
   }
 
-  revalidatePath(`/dashboard/projects/${projectId}`);
-  revalidatePath("/dashboard/projects");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }
 
@@ -70,7 +69,6 @@ export async function assignMarketingManager(projectId: string, userId: string) 
     });
   }
 
-  revalidatePath(`/dashboard/projects/${projectId}`);
-  revalidatePath("/dashboard/projects");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }

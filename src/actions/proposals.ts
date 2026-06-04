@@ -34,11 +34,10 @@ export async function getProposal(id: string) {
     .from("proposals")
     .select("*, clients(*), profiles:sales_person_id(full_name), projects(id, name, project_number)")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error fetching proposal details:", error.message, error.details, error.hint, error.code);
-    // 拋出明確的錯誤訊息，讓我們能在畫面上直接看到原因
     throw new Error(`資料庫讀取失敗: ${error.message || JSON.stringify(error)}`);
   }
   return data;
@@ -54,6 +53,16 @@ export async function createProposal(formData: FormData) {
   const expected_end = formData.get("expected_end") as string;
   const notes = formData.get("notes") as string;
   const quotationFile = formData.get("quotation") as File | null;
+  
+  const rawTags = formData.getAll("tags") as string[];
+  const customTagStr = formData.get("custom_tag") as string;
+  let tags = [...rawTags];
+  if (customTagStr) {
+    const customTags = customTagStr.split(",").map(t => t.trim()).filter(Boolean);
+    tags = [...tags, ...customTags];
+  }
+
+  const client_tag = formData.get("client_tag") as string || null;
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -65,7 +74,7 @@ export async function createProposal(formData: FormData) {
       .from("clients")
       .select("id")
       .eq("name", client_name)
-      .single();
+      .maybeSingle();
       
     if (existingClient) {
       client_id = existingClient.id;
@@ -120,6 +129,8 @@ export async function createProposal(formData: FormData) {
       notes,
       quotation_url,
       parsed_items,
+      tags,
+      client_tag,
       sales_person_id: user.id,
       status: 'lead'
     })
@@ -138,7 +149,7 @@ export async function createProposal(formData: FormData) {
     return { error: "新增成功，但無法取得提案 ID (可能是資料庫權限設定導致無法讀取)" };
   }
 
-  revalidatePath("/dashboard/crm");
+  revalidatePath("/dashboard", "layout");
   redirect(`/dashboard/crm/${insertedId}`);
 }
 
@@ -159,9 +170,13 @@ export async function updateProposalStatus(id: string, status: ProposalStatus) {
     console.error("Error updating status:", error);
     return { error: error.message };
   }
+
+  // 提案未成交(lost)時，自動刪除關聯專案
+  if (status === 'lost') {
+    await supabase.from("projects").delete().eq("proposal_id", id);
+  }
   
-  revalidatePath(`/dashboard/crm/${id}`);
-  revalidatePath("/dashboard/crm");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }
 
@@ -173,7 +188,7 @@ export async function markAsWon(id: string) {
     .from("proposals")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
     
   if (fetchError || !proposal) return { error: "Proposal not found" };
   
@@ -195,7 +210,8 @@ export async function markAsWon(id: string) {
       start_date: startDate.toISOString().split('T')[0],
       end_date: endDate.toISOString().split('T')[0],
       status: 'pending',
-      project_type: proposal.project_type || 'online_event'
+      project_type: proposal.project_type || 'online_event',
+      tags: proposal.tags || []
     })
     .select()
     .single();
@@ -306,15 +322,17 @@ export async function markAsWon(id: string) {
     console.error("Error triggering webhook:", e);
   }
   
-  revalidatePath("/dashboard/crm");
-  revalidatePath("/dashboard/projects");
-  revalidatePath(`/dashboard/crm/${id}`);
-  
+  revalidatePath("/dashboard", "layout");
   return { success: true, projectId: project.id };
 }
 
 export async function deleteProposal(id: string) {
   const supabase = await createClient();
+  
+  // 1. 確保連動刪除關聯專案
+  await supabase.from("projects").delete().eq("proposal_id", id);
+
+  // 2. 刪除提案
   const { error } = await supabase
     .from("proposals")
     .delete()
@@ -325,6 +343,6 @@ export async function deleteProposal(id: string) {
     return { error: error.message };
   }
   
-  revalidatePath("/dashboard/crm");
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }

@@ -51,26 +51,37 @@ export default function NewProposalPage() {
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-            {/* Client */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>客戶名稱 *</label>
-              <input 
-                name="client_name"
-                list="clients-list"
-                required 
-                placeholder="請輸入或選擇客戶名稱"
-                style={inputStyle}
-              />
-              <datalist id="clients-list">
-                {clients.map(c => (
-                  <option key={c.id} value={c.name} />
-                ))}
-              </datalist>
+            {/* Client Info */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>客戶名稱 *</label>
+                <input 
+                  name="client_name"
+                  list="clients-list"
+                  required 
+                  placeholder="請輸入或選擇客戶名稱"
+                  style={inputStyle}
+                />
+                <datalist id="clients-list">
+                  {clients.map(c => (
+                    <option key={c.id} value={c.name} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>客戶標籤 (如 VIP、科技業)</label>
+                <input 
+                  name="client_tag"
+                  placeholder="本提案專屬客戶標籤"
+                  style={inputStyle}
+                />
+              </div>
             </div>
 
             {/* Tags */}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>活動標籤</label>
+              <label style={{ fontSize: "13px", color: "var(--text-secondary)" }}>提案標籤</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 {['線上任務', '線上電競賽', '實體電競賽', '攤位活動'].map(tag => (
                   <label key={tag} style={{ 
@@ -89,6 +100,11 @@ export default function NewProposalPage() {
                   </label>
                 ))}
               </div>
+              <input 
+                name="custom_tag"
+                placeholder="輸入自訂活動標籤 (多個請用逗號分隔)"
+                style={{ ...inputStyle, marginTop: "8px" }}
+              />
             </div>
           </div>
 

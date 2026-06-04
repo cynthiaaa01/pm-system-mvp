@@ -58,12 +58,12 @@ export default async function ProjectsPage({
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
                   <span style={{ color: "var(--text-secondary)" }}>專案進度</span>
-                  <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>{project.progress}%</span>
+                  <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>{project.progress || 0}%</span>
                 </div>
                 <div style={{ width: "100%", height: "6px", background: "var(--bg-glass)", borderRadius: "3px", overflow: "hidden" }}>
                   <div style={{ 
                     height: "100%", 
-                    width: `${project.progress}%`, 
+                    width: `${project.progress || 0}%`, 
                     background: "linear-gradient(90deg, var(--accent-purple), var(--accent-blue))",
                     borderRadius: "3px" 
                   }} />

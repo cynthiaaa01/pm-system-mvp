@@ -113,6 +113,6 @@ export async function importTasks(projectId: string, tasksToImport: GeneratedTas
   const { recalculateProgress } = await import("./projects");
   await recalculateProgress(projectId);
 
-  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath("/dashboard", "layout");
   return { success: true };
 }

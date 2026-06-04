@@ -62,7 +62,17 @@ export default async function ProposalDetailPage({ params }: { params: Promise<{
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
               <div>
                 <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>客戶</p>
-                <p style={{ fontSize: "15px", color: "var(--text-primary)", margin: 0, fontWeight: "500" }}>{proposal.clients?.name}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <p style={{ fontSize: "15px", color: "var(--text-primary)", margin: 0, fontWeight: "500" }}>{proposal.clients?.name}</p>
+                  {proposal.client_tag && (
+                    <span style={{ 
+                      padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "600",
+                      background: "rgba(255, 159, 67, 0.15)", color: "var(--accent-orange, #ff9f43)", border: "1px solid rgba(255, 159, 67, 0.3)"
+                    }}>
+                      {proposal.client_tag}
+                    </span>
+                  )}
+                </div>
               </div>
               
               <div>
@@ -71,14 +81,16 @@ export default async function ProposalDetailPage({ params }: { params: Promise<{
               </div>
 
               <div>
-                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>活動標籤</p>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>提案標籤</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {proposal.tags && proposal.tags.length > 0 ? proposal.tags.map((tag: string) => (
-                    <span key={tag} style={{ 
-                      padding: "3px 10px", borderRadius: "100px", fontSize: "12px", fontWeight: "500",
-                      background: "rgba(108, 92, 231, 0.15)", color: "var(--accent-purple-light)"
-                    }}>{tag}</span>
-                  )) : (
+                  {proposal.tags && proposal.tags.length > 0 ? (
+                    proposal.tags.map((tag: string) => (
+                      <span key={tag} style={{ 
+                        padding: "3px 10px", borderRadius: "100px", fontSize: "12px", fontWeight: "500",
+                        background: "rgba(108, 92, 231, 0.15)", color: "var(--accent-purple-light)"
+                      }}>{tag}</span>
+                    ))
+                  ) : (
                     <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>未設定</span>
                   )}
                 </div>

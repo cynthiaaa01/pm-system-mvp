@@ -42,8 +42,7 @@ export async function createTaskUpdate(
     return { error: error.message };
   }
 
-  revalidatePath(`/dashboard/projects/${projectId}`);
-  revalidatePath(`/dashboard/activity`);
+  revalidatePath("/dashboard", "layout");
   return { success: true, data };
 }
 

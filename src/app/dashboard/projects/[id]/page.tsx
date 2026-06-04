@@ -70,7 +70,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </div>
           <div>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>活動標籤</p>
-            <TagManager projectId={project.id} initialTags={project.tags || []} />
+            <TagManager 
+              projectId={project.id} 
+              initialTags={Array.from(new Set([...(project.tags || []), ...(project.proposals?.tags || [])]))} 
+            />
           </div>
           <div>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>運營負責人</p>
@@ -89,7 +92,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <p style={{ fontSize: "14px", color: "var(--text-primary)", margin: 0 }}>{formatDate(project.end_date) || "未設定"}</p>
           </div>
           <div style={{ gridColumn: "span 2" }}>
-            <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>Google Drive 資料夾</p>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: "0 0 4px 0" }}>OneDrive 資料夾</p>
             {project.drive_folder_url ? (
               <a href={project.drive_folder_url} target="_blank" rel="noreferrer" style={{ fontSize: "14px", color: "var(--accent-blue-light)", textDecoration: "none" }}>
                 開啟資料夾 ↗
@@ -104,12 +107,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
             <span style={{ color: "var(--text-primary)", fontWeight: "600" }}>專案進度</span>
-            <span style={{ color: "var(--accent-blue-light)", fontWeight: "600" }}>{project.progress}%</span>
+            <span style={{ color: "var(--accent-blue-light)", fontWeight: "600" }}>{project.progress || 0}%</span>
           </div>
           <div style={{ width: "100%", height: "8px", background: "var(--bg-glass)", borderRadius: "4px", overflow: "hidden" }}>
             <div style={{ 
               height: "100%", 
-              width: `${project.progress}%`, 
+              width: `${project.progress || 0}%`, 
               background: "linear-gradient(90deg, var(--accent-purple), var(--accent-blue))",
               borderRadius: "4px",
               transition: "width 0.5s ease-out"
