@@ -42,10 +42,7 @@ export async function updateTaskStatus(id: string, status: string, projectId?: s
   const supabase = await createClient();
   const updates: any = { status };
   
-  if (status === "done") {
-    updates.completed_at = new Date().toISOString();
-  }
-  
+  // 移除對 completed_at 的更新，因為資料庫 tasks 表沒有這個欄位
   const { error } = await supabase
     .from("tasks")
     .update(updates)
@@ -119,6 +116,25 @@ export async function deleteTask(id: string, projectId: string) {
   
   if (projectId) {
     await recalculateProgress(projectId);
+  }
+  
+  revalidatePath("/dashboard", "layout");
+  return { success: true };
+}
+
+export async function createTask(task: any) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("tasks")
+    .insert([task]);
+    
+  if (error) {
+    console.error("Error creating task:", error);
+    return { error: error.message };
+  }
+  
+  if (task.project_id) {
+    await recalculateProgress(task.project_id);
   }
   
   revalidatePath("/dashboard", "layout");

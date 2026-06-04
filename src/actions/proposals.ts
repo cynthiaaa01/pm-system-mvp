@@ -281,19 +281,29 @@ export async function markAsWon(id: string) {
         
         const generatedTasks = generateTasksFromTemplates(templates, projectDates);
         
-        const tasksToInsert = generatedTasks.map((t: any) => ({
-          project_id: project.id,
-          title: t.title,
-          source_item: t.source_item,
-          task_category: t.task_category,
-          reference_point: t.reference_point,
-          start_date: t.start_date,
-          due_date: t.due_date,
-          duration_days: t.duration_days,
-          sort_order: t.sort_order,
-          status: 'todo' as any,
-          priority: 'medium' as any,
-        }));
+        const tasksToInsert = generatedTasks.map((t: any) => {
+          let assignee_id = null;
+          if (t.task_category === "運營") {
+            assignee_id = project.operations_id;
+          } else if (t.task_category === "行銷") {
+            assignee_id = project.marketing_id;
+          }
+
+          return {
+            project_id: project.id,
+            title: t.title,
+            source_item: t.source_item,
+            task_category: t.task_category,
+            reference_point: t.reference_point,
+            start_date: t.start_date,
+            due_date: t.due_date,
+            duration_days: t.duration_days,
+            sort_order: t.sort_order,
+            status: 'todo' as any,
+            priority: 'medium' as any,
+            assignee_id
+          };
+        });
         
         await supabase.from("tasks").insert(tasksToInsert);
       }

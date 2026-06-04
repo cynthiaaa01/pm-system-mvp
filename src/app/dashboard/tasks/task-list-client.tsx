@@ -48,17 +48,18 @@ export default function TaskListClient({ initialTasks }: { initialTasks: any[] }
     return (
       <div key={task.id} className="glass-card" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px", borderLeft: `3px solid ${PRIORITY_COLORS[task.priority as TaskPriority] || "var(--text-muted)"}`, opacity: loadingId === task.id ? 0.6 : 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <h3 style={{ fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", margin: 0 }}>
-            {task.name}
-          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            <Link href={`/dashboard/projects/${task.project_id}`} style={{ fontSize: "12px", color: "var(--accent-blue-light)", textDecoration: "none", fontWeight: "500" }}>
+              {task.projects?.name || "未關聯專案"}
+            </Link>
+            <h3 style={{ fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", margin: 0 }}>
+              {task.title || task.name || "未命名任務"}
+            </h3>
+          </div>
           <span style={{ fontSize: "11px", color: isOverdue ? "var(--danger)" : "var(--text-muted)", background: isOverdue ? "var(--danger-bg)" : "var(--bg-glass)", padding: "2px 6px", borderRadius: "4px" }}>
             {formatDate(task.due_date)} {isOverdue ? "(逾期)" : ""}
           </span>
         </div>
-
-        <Link href={`/dashboard/projects/${task.project_id}`} style={{ fontSize: "13px", color: "var(--accent-blue-light)", textDecoration: "none" }}>
-          {task.projects?.name}
-        </Link>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>

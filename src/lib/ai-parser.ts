@@ -42,7 +42,7 @@ export async function parseQuotation(fileBuffer: Buffer, mimeType: string): Prom
     `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: [
         {
           role: "user",
@@ -62,13 +62,30 @@ export async function parseQuotation(fileBuffer: Buffer, mimeType: string): Prom
       }
     });
 
-    if (!response.text) return null;
+    if (!response.text) {
+      throw new Error("AI 回應為空");
+    }
     
     // 解析 JSON
-    const result = JSON.parse(response.text) as ParsedQuotation;
-    return result;
-  } catch (error) {
-    console.error("AI 解析報價單失敗:", error);
-    return null;
+    // 有時候 AI 還是會包裝在 ```json ... ``` 裡，可以做簡單的正則處理
+    let textToParse = response.text;
+    if (textToParse.includes("```json")) {
+      textToParse = textToParse.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+    }
+
+    try {
+      const result = JSON.parse(textToParse) as ParsedQuotation;
+      return result;
+    } catch (parseErr) {
+      console.error("JSON 解析失敗:", textToParse);
+      throw new Error("AI 回傳的格式無法解析為有效 JSON");
+    }
+  } catch (error: any) {
+    console.error("AI 解析報價單失敗詳細錯誤:", error);
+    let errorMsg = error.message || "未知錯誤";
+    if (errorMsg.includes("429") || errorMsg.includes("Quota exceeded")) {
+      errorMsg = "AI API 呼叫次數已達上限 (429 Quota Exceeded)。請稍等 1 分鐘後再試，或升級您的 Gemini API 方案。";
+    }
+    throw new Error(errorMsg);
   }
 }

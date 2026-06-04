@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { updateTaskStatus, assignTask, deleteTask } from "@/actions/tasks";
+import { useState, useRef } from "react";
+import { updateTaskStatus, assignTask, deleteTask, createTask } from "@/actions/tasks";
 import { updateProjectStatus, updateProjectReferenceDates } from "@/actions/projects";
 import { assignOperationsManager, assignMarketingManager } from "@/actions/project-assignment";
 import { formatDate } from "@/lib/utils";
 import { TASK_STATUS_LABELS, PROJECT_STATUS_LABELS, PRIORITY_COLORS, REFERENCE_POINT_LABELS, TASK_CATEGORY_COLORS } from "@/lib/constants";
 import type { TaskPriority } from "@/types/database";
-import { previewQuotationTasks, importTasks } from "@/actions/task-import";
+import { previewQuotationTasks, importTasks, uploadAndParseQuotationForProject } from "@/actions/task-import";
 import type { GeneratedTask } from "@/lib/task-generation";
 import { ActivityFeed } from "@/components/ui/activity-feed";
 import { UpdateComposer } from "@/components/ui/update-composer";
@@ -34,8 +34,10 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
     }
     return d;
   });
-  const [groupByCategory, setGroupByCategory] = useState(true);
-
+  const [taskFilter, setTaskFilter] = useState("all");
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadingQuotation, setUploadingQuotation] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [previewTasks, setPreviewTasks] = useState<(GeneratedTask & { selected: boolean; _id: string })[]>([]);
@@ -52,7 +54,48 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
   async function handleTaskStatus(taskId: string, status: string) {
     setLoading(true);
     await updateTaskStatus(taskId, status, project.id);
+    
+    // Check if this was the last task to complete
+    if (status === "done") {
+      const allOtherTasksDone = tasks.filter(t => t.id !== taskId).every(t => t.status === "done");
+      if (allOtherTasksDone && project.status !== "completed") {
+        if (confirm("所有的任務皆已完成！是否要將專案狀態更新為「完成」？")) {
+          await updateProjectStatus(project.id, "completed");
+        }
+      }
+    }
     setLoading(false);
+  }
+
+  function handleDownloadCSV() {
+    // Generate CSV content
+    const headers = ["#", "任務名稱", "任務類別", "來源品項", "負責人", "狀態", "基準點", "開始日", "截止日", "天數"];
+    const rows = tasks.map(t => {
+      const assigneeName = (t as any).assignee?.full_name || "未指派";
+      const statusLabel = TASK_STATUS_LABELS[t.status as keyof typeof TASK_STATUS_LABELS] || t.status;
+      return [
+        t.sort_order,
+        t.title || t.name,
+        t.task_category || "",
+        t.source_item || "",
+        assigneeName,
+        statusLabel,
+        t.reference_point || "",
+        t.start_date || "",
+        t.due_date || "",
+        t.duration_days || ""
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(",");
+    });
+    
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n"); // add BOM for Excel
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `${project.name}_任務清單.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   async function handleAssign(taskId: string, assigneeId: string) {
@@ -66,6 +109,23 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
     setLoading(true);
     const res = await deleteTask(taskId, project.id);
     if (res?.error) alert("刪除失敗：" + res.error);
+    setLoading(false);
+  }
+
+  async function handleAddTask() {
+    const title = prompt("請輸入任務名稱：", "新任務");
+    if (!title) return;
+    
+    setLoading(true);
+    const newTask = {
+      project_id: project.id,
+      title: title,
+      status: "todo",
+      task_category: "未分類",
+      sort_order: tasks.length > 0 ? Math.max(...tasks.map(t => t.sort_order || 0)) + 1 : 1
+    };
+    const res = await createTask(newTask);
+    if (res?.error) alert("新增失敗：" + res.error);
     setLoading(false);
   }
 
@@ -95,7 +155,11 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
     setImporting(true);
     const res = await previewQuotationTasks(project.id);
     if (res.error) {
-      alert(res.error);
+      if (res.error.includes("沒有關聯的報價單") || res.error.includes("未進行 AI 解析") || res.error.includes("找不到任何品項")) {
+        setShowUploadModal(true);
+      } else {
+        alert(res.error);
+      }
     } else if (res.tasks) {
       if (res.tasks.length === 0) {
         alert("目前的報價單品項沒有配對到任何預設任務 (SOP)。");
@@ -105,6 +169,26 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
       }
     }
     setImporting(false);
+  }
+
+  async function handleUploadQuotation() {
+    if (!uploadFile) return alert("請選擇檔案");
+    setUploadingQuotation(true);
+    
+    const formData = new FormData();
+    formData.append("file", uploadFile);
+    
+    const res = await uploadAndParseQuotationForProject(project.id, formData);
+    if (res.error) {
+      alert(res.error);
+      setUploadingQuotation(false);
+    } else {
+      setShowUploadModal(false);
+      setUploadFile(null);
+      // 上傳解析成功後，自動重試匯入預覽
+      await handleOpenImportModal();
+      setUploadingQuotation(false);
+    }
   }
 
   function handlePreviewTaskChange(id: string, field: string, value: string | number | boolean) {
@@ -158,22 +242,49 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
 
   const now = new Date();
 
-  const categories = groupByCategory
-    ? [...new Set(tasks.map(t => t.task_category || '未分類'))]
-    : [null];
+  const categories = [...new Set(tasks.map(t => t.task_category || '未分類'))];
 
   const getGroupedTasks = (category: string | null) => {
-    if (!groupByCategory) return tasks;
-    return tasks.filter(t => (t.task_category || '未分類') === category);
+    let filtered = tasks;
+    if (taskFilter !== "all") {
+      filtered = filtered.filter(t => t.status === taskFilter);
+    }
+    return filtered.filter(t => (t.task_category || '未分類') === category);
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       <div className="glass-card" style={{ padding: "24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "18px" }}>📆</span>
-            <h2 style={{ fontSize: "18px", fontWeight: "600", color: "var(--text-primary)", margin: 0 }}>基準日期設定</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "18px" }}>📆</span>
+              <h2 style={{ fontSize: "18px", fontWeight: "600", color: "var(--text-primary)", margin: 0 }}>專案設定</h2>
+            </div>
+            
+            {/* 移到這裡的專案狀態選單 */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>專案狀態:</span>
+              <select
+                value={project.status}
+                onChange={handleProjectStatus}
+                disabled={loading}
+                style={{
+                  padding: "6px 12px",
+                  background: "var(--bg-glass)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                  fontSize: "13px",
+                  outline: "none",
+                  cursor: "pointer"
+                }}
+              >
+                {Object.entries(PROJECT_STATUS_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <button
             onClick={handleSaveDates}
@@ -303,19 +414,47 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
             >
               {importing ? "載入中..." : "✨ 匯入報價單任務"}
             </button>
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={groupByCategory}
-                onChange={e => setGroupByCategory(e.target.checked)}
-                style={{ accentColor: "var(--accent-purple)" }}
-              />
-              依任務類別分組
-            </label>
-            <select
-              value={project.status}
-              onChange={handleProjectStatus}
+            <button
+              onClick={handleAddTask}
               disabled={loading}
+              style={{
+                padding: "6px 12px",
+                background: "var(--bg-tertiary)",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
+                borderRadius: "var(--radius-md)",
+                cursor: "pointer",
+                fontWeight: "500",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                opacity: loading ? 0.7 : 1
+              }}
+            >
+              ➕ 新增任務
+            </button>
+            <button
+              onClick={handleDownloadCSV}
+              style={{
+                padding: "6px 12px",
+                background: "var(--bg-tertiary)",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
+                borderRadius: "var(--radius-md)",
+                cursor: "pointer",
+                fontWeight: "500",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              📥 下載 Excel (CSV)
+            </button>
+            <select
+              value={taskFilter}
+              onChange={e => setTaskFilter(e.target.value)}
               style={{
                 padding: "8px 12px",
                 background: "var(--bg-glass)",
@@ -323,10 +462,12 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
                 borderRadius: "var(--radius-md)",
                 color: "var(--text-primary)",
                 fontSize: "13px",
-                outline: "none"
+                outline: "none",
+                cursor: "pointer"
               }}
             >
-              {Object.entries(PROJECT_STATUS_LABELS).map(([val, label]) => (
+              <option value="all">所有任務</option>
+              {Object.entries(TASK_STATUS_LABELS).map(([val, label]) => (
                 <option key={val} value={val}>{label}</option>
               ))}
             </select>
@@ -334,29 +475,26 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
         </div>
 
         {categories.map(category => (
-          <div key={category || 'all'} style={{ marginBottom: groupByCategory ? "24px" : "0" }}>
-            {groupByCategory && category && (
-              <div style={{ 
-                display: "flex", alignItems: "center", gap: "8px", 
-                padding: "8px 12px", marginBottom: "12px",
-                background: "var(--bg-tertiary)", borderRadius: "var(--radius-md)",
-                borderLeft: `3px solid ${TASK_CATEGORY_COLORS[category] || 'var(--text-muted)'}` 
-              }}>
-                <h3 style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", margin: 0 }}>
-                  {category}
-                </h3>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                  ({getGroupedTasks(category).length} 項)
-                </span>
-              </div>
-            )}
+          <div key={category || 'all'} style={{ marginBottom: "24px" }}>
+            <div style={{ 
+              display: "flex", alignItems: "center", gap: "8px", 
+              padding: "8px 12px", marginBottom: "12px",
+              background: "var(--bg-tertiary)", borderRadius: "var(--radius-md)",
+              borderLeft: `3px solid ${TASK_CATEGORY_COLORS[category] || 'var(--text-muted)'}` 
+            }}>
+              <h3 style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", margin: 0 }}>
+                {category}
+              </h3>
+              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                ({getGroupedTasks(category).length} 項)
+              </span>
+            </div>
             <div style={{ width: "100%", overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", minWidth: "1000px" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border)" }}>
                     <th style={{ padding: "10px", color: "var(--text-secondary)", fontSize: "12px", width: "40px" }}>#</th>
                     <th style={{ padding: "10px", color: "var(--text-secondary)", fontSize: "12px" }}>任務名稱</th>
-                    {!groupByCategory && <th style={{ padding: "10px", color: "var(--text-secondary)", fontSize: "12px", width: "120px" }}>任務類別</th>}
                     <th style={{ padding: "10px", color: "var(--text-secondary)", fontSize: "12px", width: "160px" }}>來源品項</th>
                     <th style={{ padding: "10px", color: "var(--text-secondary)", fontSize: "12px", width: "150px" }}>負責人</th>
                     <th style={{ padding: "10px", color: "var(--text-secondary)", fontSize: "12px", width: "120px" }}>狀態</th>
@@ -396,17 +534,7 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
                             </span>
                           </div>
                         </td>
-                        {!groupByCategory && (
-                          <td style={{ padding: "10px" }}>
-                            <span style={{ 
-                              fontSize: "11px", padding: "2px 8px", borderRadius: "100px",
-                              background: `${TASK_CATEGORY_COLORS[task.task_category] || 'var(--text-muted)'}20`,
-                              color: TASK_CATEGORY_COLORS[task.task_category] || 'var(--text-muted)'
-                            }}>
-                              {task.task_category || '-'}
-                            </span>
-                          </td>
-                        )}
+
                         <td style={{ padding: "10px", color: "var(--text-muted)", fontSize: "12px" }}>
                           <span title={task.source_item} style={{ 
                             display: "inline-block", maxWidth: "150px", overflow: "hidden", 
@@ -646,6 +774,60 @@ export default function ProjectDetailClient({ project, tasks, users, updates = [
                 style={{ padding: "8px 16px", background: "linear-gradient(135deg, var(--accent-purple), var(--accent-blue))", border: "none", color: "white", borderRadius: "var(--radius-md)", cursor: "pointer", fontWeight: "600", fontSize: "13px", opacity: (importing || previewTasks.filter(t => t.selected).length === 0) ? 0.7 : 1 }}
               >
                 {importing ? "匯入中..." : `確認匯入 ${previewTasks.filter(t => t.selected).length} 項任務`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Quotation Modal */}
+      {showUploadModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
+          <div className="glass-card" style={{ width: "100%", maxWidth: "450px", maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ padding: "20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>📄</span> 上傳並解析報價單
+              </h3>
+              <button onClick={() => setShowUploadModal(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "20px", padding: "0" }}>×</button>
+            </div>
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
+                系統未偵測到此專案已完成 AI 解析的報價單。請重新上傳報價單檔案，系統將自動進行 AI 分析並產生預設任務清單。
+              </p>
+              <div>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.png"
+                  onChange={e => setUploadFile(e.target.files?.[0] || null)}
+                  disabled={uploadingQuotation}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "8px",
+                    background: "var(--bg-tertiary)",
+                    border: "1px dashed var(--border)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                    fontSize: "13px"
+                  }}
+                />
+                {uploadFile && (
+                  <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--accent-purple-light)" }}>
+                    已選擇檔案: {uploadFile.name}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{ padding: "20px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button onClick={() => setShowUploadModal(false)} disabled={uploadingQuotation} style={{ padding: "8px 16px", background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "var(--radius-md)", cursor: "pointer", fontSize: "13px" }}>
+                取消
+              </button>
+              <button 
+                onClick={handleUploadQuotation} 
+                disabled={uploadingQuotation || !uploadFile}
+                style={{ padding: "8px 16px", background: "linear-gradient(135deg, var(--accent-purple), var(--accent-blue))", border: "none", color: "white", borderRadius: "var(--radius-md)", cursor: "pointer", fontWeight: "600", fontSize: "13px", opacity: (uploadingQuotation || !uploadFile) ? 0.7 : 1 }}
+              >
+                {uploadingQuotation ? "上傳與解析中..." : "開始上傳並解析"}
               </button>
             </div>
           </div>

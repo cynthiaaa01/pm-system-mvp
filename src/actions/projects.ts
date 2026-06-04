@@ -19,8 +19,8 @@ export async function getProjects(filters?: { status?: string; search?: string }
 
   const { data, error } = await query;
   if (error) {
-    console.error("Error fetching projects:", error);
-    return [];
+    console.error("Error fetching projects detail:", JSON.stringify(error), error);
+    throw new Error(`取得專案列表失敗: ${error.message || JSON.stringify(error)}`);
   }
   return data;
 }
@@ -68,10 +68,14 @@ export async function recalculateProgress(projectId: string) {
   const doneCount = tasks.filter(t => t.status === "done").length;
   const progress = Math.round((doneCount / tasks.length) * 100);
   
-  await supabase
+  const { error: updateError } = await supabase
     .from("projects")
     .update({ progress })
     .eq("id", projectId);
+    
+  if (updateError) {
+    console.error("Error recalculating project progress:", updateError);
+  }
 }
 
 export async function updateProjectReferenceDates(

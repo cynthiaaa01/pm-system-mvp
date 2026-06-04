@@ -25,6 +25,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const users = await getAllUsers();
   const updates = await getProjectUpdates(project.id);
 
+  // Dynamically calculate progress to ensure it's always perfectly in sync on the detail page
+  const totalTasks = tasks.length;
+  const doneTasks = tasks.filter((t: any) => t.status === "done").length;
+  const calculatedProgress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "24px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "16px", justifyContent: "space-between" }}>
@@ -107,12 +112,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
             <span style={{ color: "var(--text-primary)", fontWeight: "600" }}>專案進度</span>
-            <span style={{ color: "var(--accent-blue-light)", fontWeight: "600" }}>{project.progress || 0}%</span>
+            <span style={{ color: "var(--accent-blue-light)", fontWeight: "600" }}>{calculatedProgress}%</span>
           </div>
           <div style={{ width: "100%", height: "8px", background: "var(--bg-glass)", borderRadius: "4px", overflow: "hidden" }}>
             <div style={{ 
               height: "100%", 
-              width: `${project.progress || 0}%`, 
+              width: `${calculatedProgress}%`, 
               background: "linear-gradient(90deg, var(--accent-purple), var(--accent-blue))",
               borderRadius: "4px",
               transition: "width 0.5s ease-out"
