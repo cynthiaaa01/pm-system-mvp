@@ -294,7 +294,7 @@ export default function DashboardContent({
                           title={task.priority}
                         />
                         <div className="task-item-info">
-                          <span className="task-item-name">{task.name}</span>
+                          <span className="task-item-name">{task.title || task.name || "未命名任務"}</span>
                           <span className="task-item-project">
                             {task.projects?.name || "—"}
                           </span>
