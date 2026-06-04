@@ -73,6 +73,7 @@ interface DashboardContentProps {
   projectsByStatus: Record<string, number>;
   myTasks: Array<{
     id: string;
+    title?: string | null;
     name: string;
     status: string;
     due_date: string | null;
